@@ -1,6 +1,3 @@
-import heapq
-import random
-import time
 import tkinter as tk
 from collections import deque
 from tkinter import ttk
