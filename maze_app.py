@@ -1,59 +1,12 @@
 import heapq
-import random
 import time
 import tkinter as tk
-from collections import deque
-from tkinter import ttk
+from collections import deque  # Added this import
+from tkinter import filedialog, ttk
 
+from maze_classes import Graph, Node
+from vision_handler import VisionHandler
 
-class Node:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.visited = False
-        self.parent = None
-
-class Graph:
-    def __init__(self, size):
-        self.size = size
-        self.nodes = [[Node(i, j) for j in range(size)] for i in range(size)]
-        self.edges = set()
-
-    def generateSquareGraph(self):
-        def get_unvisited_neighbors(x, y):
-            neighbors = []
-            directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-            for dx, dy in directions:
-                new_x, new_y = x + dx, y + dy
-                if (0 <= new_x < self.size and 0 <= new_y < self.size and 
-                    not self.nodes[new_x][new_y].visited):
-                    neighbors.append((new_x, new_y))
-            return neighbors
-
-        stack = [(0, 0)]
-        self.nodes[0][0].visited = True
-        
-        while stack:
-            current_x, current_y = stack[-1]
-            neighbors = get_unvisited_neighbors(current_x, current_y)
-            
-            if neighbors:
-                next_x, next_y = random.choice(neighbors)
-                self.edges.add(((current_x, current_y), (next_x, next_y)))
-                self.edges.add(((next_x, next_y), (current_x, current_y)))
-                self.nodes[next_x][next_y].visited = True
-                stack.append((next_x, next_y))
-            else:
-                stack.pop()
-
-    def getAdjacencyMatrix(self):
-        matrix = [[0] * self.size * self.size for _ in range(self.size * self.size)]
-        for (x1, y1), (x2, y2) in self.edges:
-            i1 = x1 * self.size + y1
-            i2 = x2 * self.size + y2
-            matrix[i1][i2] = 1
-            matrix[i2][i1] = 1
-        return matrix
 
 class MazeApp:
     def __init__(self, root):
@@ -80,50 +33,69 @@ class MazeApp:
 
         ttk.Button(input_frame, text="Generate Maze", command=self.generate_maze).grid(row=3, column=0, pady=2)
         ttk.Button(input_frame, text="Solve Maze", command=self.solve_maze).grid(row=3, column=1, pady=2)
+        ttk.Button(input_frame, text="Load Image", command=self.load_image).grid(row=3, column=2, pady=2)
 
         self.time_label = ttk.Label(input_frame, text="Total Time: 0.0000 ms")
-        self.time_label.grid(row=4, column=0, columnspan=2, pady=2)
+        self.time_label.grid(row=4, column=0, columnspan=3, pady=2)
 
         # Canvas for maze
-        self.canvas_width = 800  # Fixed canvas width
-        self.canvas_height = 600  # Fixed canvas height (excluding input frame)
+        self.canvas_width = 800
+        self.canvas_height = 600
         self.canvas = tk.Canvas(root, width=self.canvas_width, height=self.canvas_height)
         self.canvas.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(1, weight=1)
 
-        self.cell_size = 30  # Initial value, will be adjusted
-        self.offset = 10     # Padding for border visibility
+        self.cell_size = 30
+        self.offset = 10
         self.graph = None
         self.step_data = None
         self.step_index = 0
         self.is_solving = False
+        self.start = (0, 0)
+        self.end = (0, 0)
 
     def generate_maze(self):
         size = self.size_var.get()
         self.canvas.delete("all")
         
-        # Calculate cell_size to fit maze within canvas with offset
         available_width = self.canvas_width - 2 * self.offset
         available_height = self.canvas_height - 2 * self.offset
         self.cell_size = min(available_width // size, available_height // size)
-        
-        # Ensure cell_size is at least 10 for visibility
         self.cell_size = max(self.cell_size, 10)
         
         self.graph = Graph(size)
         self.graph.generateSquareGraph()
+        self.start = (0, 0)
+        self.end = (size-1, size-1)
         self.draw_maze()
         self.step_data = None
         self.step_index = 0
         self.is_solving = False
         self.time_label.config(text="Total Time: 0.0000 ms")
 
+    def load_image(self):
+        file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.png *.jpg *.jpeg")])
+        if file_path:
+            handler = VisionHandler(file_path)
+            self.graph, self.start, self.end = handler.image_to_graph()
+            
+            available_width = self.canvas_width - 2 * self.offset
+            available_height = self.canvas_height - 2 * self.offset
+            self.cell_size = min(available_width // self.graph.size, available_height // self.graph.size)
+            self.cell_size = max(self.cell_size, 10)
+            
+            self.canvas.delete("all")
+            self.draw_maze()
+            self.step_data = None
+            self.step_index = 0
+            self.is_solving = False
+            self.time_label.config(text="Total Time: 0.0000 ms")
+
     def draw_maze(self):
         size = self.graph.size
         
-        # Draw internal walls with offset
         for i in range(size):
             for j in range(size):
                 x1 = j * self.cell_size + self.offset
@@ -140,7 +112,6 @@ class MazeApp:
                 if i == 0 or ((i, j), (i-1, j)) not in self.graph.edges:
                     self.canvas.create_line(x1, y1, x2, y1, fill="black")
 
-        # Draw thick outer border with offset
         border_width = 4
         self.canvas.create_rectangle(
             self.offset, self.offset, 
@@ -148,17 +119,21 @@ class MazeApp:
             outline="black", width=border_width, tags="border"
         )
 
-        # Draw start and end points with offset and scaled size
-        start_end_size = max(self.cell_size // 6, 5)  # Adjust size based on cell_size, min 5
+        start_end_size = max(self.cell_size // 6, 5)
+        sx, sy = self.start
         self.canvas.create_oval(
-            self.offset + start_end_size, self.offset + start_end_size,
-            self.offset + self.cell_size - start_end_size, self.offset + self.cell_size - start_end_size,
+            sy * self.cell_size + self.offset + start_end_size,
+            sx * self.cell_size + self.offset + start_end_size,
+            sy * self.cell_size + self.offset + self.cell_size - start_end_size,
+            sx * self.cell_size + self.offset + self.cell_size - start_end_size,
             fill="green"
         )
-        end_x = (size - 1) * self.cell_size + self.offset
+        ex, ey = self.end
         self.canvas.create_oval(
-            end_x + start_end_size, end_x + start_end_size,
-            end_x + self.cell_size - start_end_size, end_x + self.cell_size - start_end_size,
+            ey * self.cell_size + self.offset + start_end_size,
+            ex * self.cell_size + self.offset + start_end_size,
+            ey * self.cell_size + self.offset + self.cell_size - start_end_size,
+            ex * self.cell_size + self.offset + self.cell_size - start_end_size,
             fill="red"
         )
 
@@ -211,15 +186,15 @@ class MazeApp:
             )
 
         temp_parent_dict = {n: p for n, _, p in self.step_data[:self.step_index + 1] if p is not None}
-        temp_parent_dict[(0, 0)] = None
+        temp_parent_dict[self.start] = None
         temp_path = self.reconstruct_path(temp_parent_dict, current)
         self.draw_temp_path(temp_path)
 
         self.step_index += 1
         if self.step_index == len(self.step_data):
             final_parent_dict = {n: p for n, _, p in self.step_data if p is not None}
-            final_parent_dict[(0, 0)] = None
-            final_path = self.reconstruct_path(final_parent_dict, (self.graph.size-1, self.graph.size-1))
+            final_parent_dict[self.start] = None
+            final_path = self.reconstruct_path(final_parent_dict, self.end)
             self.draw_path(final_path)
             self.is_solving = False
         else:
@@ -227,9 +202,9 @@ class MazeApp:
 
     def bfs(self):
         size = self.graph.size
-        queue = deque([(0, 0)])
-        visited = {(0, 0)}
-        parent = {(0, 0): None}
+        queue = deque([self.start])  # Now deque is defined
+        visited = {self.start}
+        parent = {self.start: None}
         steps = []
 
         while queue:
@@ -247,16 +222,16 @@ class MazeApp:
                     considered.append((new_x, new_y))
             
             steps.append(((x, y), considered, parent[(x, y)]))
-            if x == size-1 and y == size-1:
+            if (x, y) == self.end:
                 break
 
-        return self.reconstruct_path(parent, (size-1, size-1)), steps
+        return self.reconstruct_path(parent, self.end), steps
 
     def dijkstra(self):
         size = self.graph.size
-        pq = [(0, (0, 0))]
-        distances = {(0, 0): 0}
-        parent = {(0, 0): None}
+        pq = [(0, self.start)]
+        distances = {self.start: 0}
+        parent = {self.start: None}
         steps = []
 
         while pq:
@@ -275,19 +250,20 @@ class MazeApp:
                         considered.append((new_x, new_y))
             
             steps.append(((x, y), considered, parent[(x, y)]))
-            if x == size-1 and y == size-1:
+            if (x, y) == self.end:
                 break
 
-        return self.reconstruct_path(parent, (size-1, size-1)), steps
+        return self.reconstruct_path(parent, self.end), steps
 
     def a_star(self):
         def heuristic(x, y):
-            return abs(size-1-x) + abs(size-1-y)
+            ex, ey = self.end
+            return abs(ex - x) + abs(ey - y)
 
         size = self.graph.size
-        pq = [(heuristic(0, 0), 0, (0, 0))]
-        costs = {(0, 0): 0}
-        parent = {(0, 0): None}
+        pq = [(heuristic(*self.start), 0, self.start)]
+        costs = {self.start: 0}
+        parent = {self.start: None}
         steps = []
 
         while pq:
@@ -307,10 +283,10 @@ class MazeApp:
                         considered.append((new_x, new_y))
             
             steps.append(((x, y), considered, parent[(x, y)]))
-            if x == size-1 and y == size-1:
+            if (x, y) == self.end:
                 break
 
-        return self.reconstruct_path(parent, (size-1, size-1)), steps
+        return self.reconstruct_path(parent, self.end), steps
 
     def reconstruct_path(self, parent, end):
         path = []
