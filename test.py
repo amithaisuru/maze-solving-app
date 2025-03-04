@@ -123,6 +123,13 @@ class MazeApp:
                 if i == 0 or ((i, j), (i-1, j)) not in self.graph.edges:
                     self.canvas.create_line(x1, y1, x2, y1, fill="black")
 
+        #draw outer walls
+        border_width = 4  # Thickness of the outer border
+        self.canvas.create_rectangle(
+            0, 0, size * self.cell_size, size * self.cell_size,
+            outline="black", width=border_width, tags="border"
+        )
+
         self.canvas.create_oval(5, 5, self.cell_size-5, self.cell_size-5, fill="green")
         end_x = (size-1)*self.cell_size
         self.canvas.create_oval(end_x+5, end_x+5, end_x+self.cell_size-5, 
