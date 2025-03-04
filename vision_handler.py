@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from maze_classes import Graph, Node  # Import from new file
+from maze_classes import Graph, Node
 
 
 class VisionHandler:
@@ -10,60 +10,83 @@ class VisionHandler:
         if self.image is None:
             raise ValueError(f"Failed to load image: {image_path}")
         self.height, self.width = self.image.shape[:2]
+        self.binary = None
+        self.grid_size = None
+        self.cell_size = None
 
     def preprocess_image(self):
         """Convert to grayscale and threshold to binary."""
         gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
         _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
-        #display image
-        cv2.imshow("Binary Image", binary)
+        self.binary = binary
         return binary
 
-    def detect_grid_size(self, binary):
-        """Estimate grid size by detecting cell boundaries."""
-        contours, _ = cv2.findContours(binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    def detect_cell_size(self):
+        """Identify the nearest two vertical lines to determine cell width/height."""
+        binary = self.binary
         
-        outer_contour = max(contours, key=cv2.contourArea)
-        x, y, w, h = cv2.boundingRect(outer_contour)
+        # Use a horizontal profile (middle row) to detect vertical lines
+        mid_row = binary[self.height // 2, :]
+        transitions = []
         
-        horizontal_lines = 0
-        vertical_lines = 0
-        sample_row = binary[y + h // 2, x:x+w]
-        sample_col = binary[y:y+h, x + w // 2]
+        # Find transitions from white (255) to black (0) or vice versa
+        for x in range(1, len(mid_row)):
+            if mid_row[x-1] != mid_row[x]:
+                transitions.append(x)
         
-        for i in range(1, len(sample_row)):
-            if sample_row[i-1] == 0 and sample_row[i] == 255:
-                horizontal_lines += 1
-        for i in range(1, len(sample_col)):
-            if sample_col[i-1] == 0 and sample_col[i] == 255:
-                vertical_lines += 1
+        # Find the smallest distance between two consecutive transitions (cell width)
+        if len(transitions) < 2:
+            raise ValueError("Could not detect enough vertical lines in the image")
         
-        grid_size = min(horizontal_lines + 1, vertical_lines + 1)
-        return grid_size
+        distances = [transitions[i+1] - transitions[i] for i in range(len(transitions)-1)]
+        self.cell_size = min(distances)  # Assume smallest consistent gap is cell size
+        
+        # Estimate grid size based on image dimensions
+        self.grid_size = min(self.width // self.cell_size, self.height // self.cell_size)
+        return self.cell_size, self.grid_size
 
-    def detect_borders(self, binary, grid_size):
-        """Detect walls and create edge set."""
-        cell_size = min(self.width // grid_size, self.height // grid_size)
+    def overlay_grid(self):
+        """Overlay a grid on the binary image for visualization and analysis."""
+        binary_with_grid = cv2.cvtColor(self.binary, cv2.COLOR_GRAY2BGR)
+        
+        # Draw vertical lines
+        for j in range(self.grid_size + 1):
+            x = j * self.cell_size
+            cv2.line(binary_with_grid, (x, 0), (x, self.height), (0, 255, 0), 1)
+        
+        # Draw horizontal lines
+        for i in range(self.grid_size + 1):
+            y = i * self.cell_size
+            cv2.line(binary_with_grid, (0, y), (self.width, y), (0, 255, 0), 1)
+        
+        # Optional: Save or display the grid overlay for debugging
+        # cv2.imwrite("grid_overlay.png", binary_with_grid)
+        return binary_with_grid
+
+    def analyze_grid(self):
+        """Analyze the binary image with the overlaid grid to detect walls."""
         edges = set()
         
-        for i in range(grid_size):
-            for j in range(grid_size):
-                x1 = j * cell_size
-                y1 = i * cell_size
-                x2 = x1 + cell_size
-                y2 = y1 + cell_size
+        for i in range(self.grid_size):
+            for j in range(self.grid_size):
+                x1 = j * self.cell_size
+                y1 = i * self.cell_size
+                x2 = x1 + self.cell_size
+                y2 = y1 + self.cell_size
                 
-                if j + 1 < grid_size:
-                    right_region = binary[y1:y2, x2-2:x2+2]
-                    if np.mean(right_region) > 128:
+                # Check right border
+                if j + 1 < self.grid_size:
+                    right_region = self.binary[y1:y2, x2-2:x2+2]
+                    if np.mean(right_region) > 128:  # Wall present (black in inverted binary)
                         pass
                     else:
                         edges.add(((i, j), (i, j+1)))
                         edges.add(((i, j+1), (i, j)))
                 
-                if i + 1 < grid_size:
-                    bottom_region = binary[y2-2:y2+2, x1:x2]
-                    if np.mean(bottom_region) > 128:
+                # Check bottom border
+                if i + 1 < self.grid_size:
+                    bottom_region = self.binary[y2-2:y2+2, x1:x2]
+                    if np.mean(bottom_region) > 128:  # Wall present
                         pass
                     else:
                         edges.add(((i, j), (i+1, j)))
@@ -79,8 +102,7 @@ class VisionHandler:
         green_upper = np.array([85, 255, 255])
         green_mask = cv2.inRange(hsv, green_lower, green_upper)
         green_y, green_x = np.where(green_mask > 0)
-        start = (green_y[0] // (self.height // self.graph.size), 
-                 green_x[0] // (self.width // self.graph.size)) if green_y.size > 0 else (0, 0)
+        start = (green_y[0] // self.cell_size, green_x[0] // self.cell_size) if green_y.size > 0 else (0, 0)
         
         red_lower1 = np.array([0, 100, 100])
         red_upper1 = np.array([10, 255, 255])
@@ -88,18 +110,20 @@ class VisionHandler:
         red_upper2 = np.array([180, 255, 255])
         red_mask = cv2.inRange(hsv, red_lower1, red_upper1) | cv2.inRange(hsv, red_lower2, red_upper2)
         red_y, red_x = np.where(red_mask > 0)
-        end = (red_y[0] // (self.height // self.graph.size), 
-               red_x[0] // (self.width // self.graph.size)) if red_y.size > 0 else (self.graph.size-1, self.graph.size-1)
+        end = (red_y[0] // self.cell_size, red_x[0] // self.cell_size) if red_y.size > 0 else (self.grid_size-1, self.grid_size-1)
         
         return start, end
 
     def image_to_graph(self):
         """Convert image to Graph object."""
-        binary = self.preprocess_image()
-        grid_size = self.detect_grid_size(binary)
+        self.preprocess_image()
+        self.detect_cell_size()
         
-        self.graph = Graph(grid_size)
-        self.graph.edges = self.detect_borders(binary, grid_size)
+        self.graph = Graph(self.grid_size)
+        self.graph.edges = self.analyze_grid()
+        
+        # Optional: Overlay grid for debugging (not needed for graph generation)
+        # self.overlay_grid()
         
         start, end = self.detect_start_end()
         return self.graph, start, end
