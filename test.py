@@ -20,7 +20,6 @@ class Graph:
         self.edges = set()
 
     def generateSquareGraph(self):
-        # BFS backtracking maze generation
         def get_unvisited_neighbors(x, y):
             neighbors = []
             directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
@@ -75,11 +74,19 @@ class MazeApp:
                                 values=["BFS", "Dijkstra", "A*"])
         algo_combo.grid(row=1, column=1)
 
-        ttk.Button(input_frame, text="Generate Maze", command=self.generate_maze).grid(row=2, column=0)
-        ttk.Button(input_frame, text="Solve Maze", command=self.solve_maze).grid(row=2, column=1)
+        ttk.Label(input_frame, text="Mode:").grid(row=2, column=0)
+        self.mode_var = tk.StringVar(value="Instant")
+        mode_combo = ttk.Combobox(input_frame, textvariable=self.mode_var, 
+                                values=["Instant", "Step"])
+        mode_combo.grid(row=2, column=1)
+
+        ttk.Button(input_frame, text="Generate Maze", command=self.generate_maze).grid(row=3, column=0)
+        ttk.Button(input_frame, text="Solve Maze", command=self.solve_maze).grid(row=3, column=1)
+        self.step_button = ttk.Button(input_frame, text="Next Step", command=self.next_step, state="disabled")
+        self.step_button.grid(row=4, column=0, columnspan=2)
 
         self.time_label = ttk.Label(input_frame, text="Time: ")
-        self.time_label.grid(row=3, column=0, columnspan=2)
+        self.time_label.grid(row=5, column=0, columnspan=2)
 
         # Canvas for maze
         self.cell_size = 30
@@ -87,6 +94,8 @@ class MazeApp:
         self.canvas.grid(row=1, column=0)
 
         self.graph = None
+        self.step_data = None
+        self.step_index = 0
 
     def generate_maze(self):
         size = self.size_var.get()
@@ -96,6 +105,9 @@ class MazeApp:
         self.graph = Graph(size)
         self.graph.generateSquareGraph()
         self.draw_maze()
+        self.step_button.config(state="disabled")
+        self.step_data = None
+        self.step_index = 0
 
     def draw_maze(self):
         size = self.graph.size
@@ -104,7 +116,6 @@ class MazeApp:
                 x1, y1 = j * self.cell_size, i * self.cell_size
                 x2, y2 = x1 + self.cell_size, y1 + self.cell_size
                 
-                # Draw borders if no edge exists
                 if ((i, j), (i, j+1)) not in self.graph.edges and j+1 < size:
                     self.canvas.create_line(x2, y1, x2, y2, fill="black")
                 if ((i, j), (i+1, j)) not in self.graph.edges and i+1 < size:
@@ -114,7 +125,6 @@ class MazeApp:
                 if i == 0 or ((i, j), (i-1, j)) not in self.graph.edges:
                     self.canvas.create_line(x1, y1, x2, y1, fill="black")
 
-        # Draw start and end points
         self.canvas.create_oval(5, 5, self.cell_size-5, self.cell_size-5, fill="green")
         end_x = (size-1)*self.cell_size
         self.canvas.create_oval(end_x+5, end_x+5, end_x+self.cell_size-5, 
@@ -124,31 +134,70 @@ class MazeApp:
         if not self.graph:
             return
 
+        self.canvas.delete("path", "highlight")
         start_time = time.time()
         algorithm = self.algo_var.get()
-        
+        mode = self.mode_var.get()
+
         if algorithm == "BFS":
-            path = self.bfs()
+            path, steps = self.bfs()
         elif algorithm == "Dijkstra":
-            path = self.dijkstra()
+            path, steps = self.dijkstra()
         else:  # A*
-            path = self.a_star()
+            path, steps = self.a_star()
 
         end_time = time.time()
         self.time_label.config(text=f"Time: {(end_time - start_time)*1000:.2f} ms")
-        
-        self.draw_path(path)
+
+        if mode == "Instant":
+            self.draw_path(path)
+        else:  # Step mode
+            self.step_data = steps
+            self.step_index = 0
+            self.step_button.config(state="normal")
+            self.next_step()
+
+    def next_step(self):
+        if self.step_data and self.step_index < len(self.step_data):
+            self.canvas.delete("highlight")
+            # Updated to unpack 3 values instead of 2
+            current, considered, parent = self.step_data[self.step_index]
+            
+            # Highlight current node
+            x, y = current
+            self.canvas.create_rectangle(
+                y*self.cell_size, x*self.cell_size,
+                (y+1)*self.cell_size, (x+1)*self.cell_size,
+                fill="yellow", outline="", tags="highlight"
+            )
+
+            # Highlight considered nodes
+            for nx, ny in considered:
+                self.canvas.create_rectangle(
+                    ny*self.cell_size, nx*self.cell_size,
+                    (ny+1)*self.cell_size, (nx+1)*self.cell_size,
+                    fill="orange", outline="", tags="highlight"
+                )
+
+            self.step_index += 1
+            if self.step_index == len(self.step_data):
+                self.step_button.config(state="disabled")
+                # Updated path reconstruction to use the parent from last step
+                final_parent_dict = {n: p for n, _, p in self.step_data if p is not None}
+                final_parent_dict[(0, 0)] = None  # Ensure start node is included
+                path = self.reconstruct_path(final_parent_dict, (self.graph.size-1, self.graph.size-1))
+                self.draw_path(path)
 
     def bfs(self):
         size = self.graph.size
         queue = deque([(0, 0)])
         visited = {(0, 0)}
         parent = {(0, 0): None}
+        steps = []
 
         while queue:
             x, y = queue.popleft()
-            if x == size-1 and y == size-1:
-                break
+            considered = []
             
             for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                 new_x, new_y = x + dx, y + dy
@@ -158,20 +207,25 @@ class MazeApp:
                     queue.append((new_x, new_y))
                     visited.add((new_x, new_y))
                     parent[(new_x, new_y)] = (x, y)
+                    considered.append((new_x, new_y))
+            
+            steps.append(((x, y), considered, parent[(x, y)]))
+            if x == size-1 and y == size-1:
+                break
 
-        return self.reconstruct_path(parent, (size-1, size-1))
+        return self.reconstruct_path(parent, (size-1, size-1)), steps
 
     def dijkstra(self):
         size = self.graph.size
         pq = [(0, (0, 0))]
         distances = {(0, 0): 0}
         parent = {(0, 0): None}
+        steps = []
 
         while pq:
             dist, (x, y) = heapq.heappop(pq)
-            if x == size-1 and y == size-1:
-                break
-
+            considered = []
+            
             for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                 new_x, new_y = x + dx, y + dy
                 if (0 <= new_x < size and 0 <= new_y < size and 
@@ -181,8 +235,13 @@ class MazeApp:
                         distances[(new_x, new_y)] = new_dist
                         parent[(new_x, new_y)] = (x, y)
                         heapq.heappush(pq, (new_dist, (new_x, new_y)))
+                        considered.append((new_x, new_y))
+            
+            steps.append(((x, y), considered, parent[(x, y)]))
+            if x == size-1 and y == size-1:
+                break
 
-        return self.reconstruct_path(parent, (size-1, size-1))
+        return self.reconstruct_path(parent, (size-1, size-1)), steps
 
     def a_star(self):
         def heuristic(x, y):
@@ -192,12 +251,12 @@ class MazeApp:
         pq = [(heuristic(0, 0), 0, (0, 0))]
         costs = {(0, 0): 0}
         parent = {(0, 0): None}
+        steps = []
 
         while pq:
             _, cost, (x, y) = heapq.heappop(pq)
-            if x == size-1 and y == size-1:
-                break
-
+            considered = []
+            
             for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
                 new_x, new_y = x + dx, y + dy
                 if (0 <= new_x < size and 0 <= new_y < size and 
@@ -208,8 +267,13 @@ class MazeApp:
                         priority = new_cost + heuristic(new_x, new_y)
                         parent[(new_x, new_y)] = (x, y)
                         heapq.heappush(pq, (priority, new_cost, (new_x, new_y)))
+                        considered.append((new_x, new_y))
+            
+            steps.append(((x, y), considered, parent[(x, y)]))
+            if x == size-1 and y == size-1:
+                break
 
-        return self.reconstruct_path(parent, (size-1, size-1))
+        return self.reconstruct_path(parent, (size-1, size-1)), steps
 
     def reconstruct_path(self, parent, end):
         path = []
@@ -223,6 +287,7 @@ class MazeApp:
         if not path:
             return
         
+        self.canvas.delete("path")
         for i in range(len(path)-1):
             x1, y1 = path[i]
             x2, y2 = path[i+1]
@@ -231,7 +296,7 @@ class MazeApp:
                 x1*self.cell_size + self.cell_size/2,
                 y2*self.cell_size + self.cell_size/2,
                 x2*self.cell_size + self.cell_size/2,
-                fill="blue", width=2
+                fill="blue", width=2, tags="path"
             )
 
 if __name__ == "__main__":
