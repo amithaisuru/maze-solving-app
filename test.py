@@ -74,19 +74,15 @@ class MazeApp:
                                 values=["BFS", "Dijkstra", "A*"])
         algo_combo.grid(row=1, column=1)
 
-        ttk.Label(input_frame, text="Mode:").grid(row=2, column=0)
-        self.mode_var = tk.StringVar(value="Instant")
-        mode_combo = ttk.Combobox(input_frame, textvariable=self.mode_var, 
-                                values=["Instant", "Step"])
-        mode_combo.grid(row=2, column=1)
+        ttk.Label(input_frame, text="Speed (ms):").grid(row=2, column=0)
+        self.speed_var = tk.IntVar(value=100)
+        ttk.Entry(input_frame, textvariable=self.speed_var).grid(row=2, column=1)
 
         ttk.Button(input_frame, text="Generate Maze", command=self.generate_maze).grid(row=3, column=0)
         ttk.Button(input_frame, text="Solve Maze", command=self.solve_maze).grid(row=3, column=1)
-        self.step_button = ttk.Button(input_frame, text="Next Step", command=self.next_step, state="disabled")
-        self.step_button.grid(row=4, column=0, columnspan=2)
 
-        self.time_label = ttk.Label(input_frame, text="Time: ")
-        self.time_label.grid(row=5, column=0, columnspan=2)
+        self.time_label = ttk.Label(input_frame, text="Total Time: 0.0000 ms")
+        self.time_label.grid(row=4, column=0, columnspan=2)
 
         # Canvas for maze
         self.cell_size = 30
@@ -96,6 +92,7 @@ class MazeApp:
         self.graph = None
         self.step_data = None
         self.step_index = 0
+        self.is_solving = False
 
     def generate_maze(self):
         size = self.size_var.get()
@@ -105,9 +102,10 @@ class MazeApp:
         self.graph = Graph(size)
         self.graph.generateSquareGraph()
         self.draw_maze()
-        self.step_button.config(state="disabled")
         self.step_data = None
         self.step_index = 0
+        self.is_solving = False
+        self.time_label.config(text="Total Time: 0.0000 ms")
 
     def draw_maze(self):
         size = self.graph.size
@@ -131,13 +129,18 @@ class MazeApp:
                               end_x+self.cell_size-5, fill="red")
 
     def solve_maze(self):
-        if not self.graph:
+        if not self.graph or self.is_solving:
             return
 
-        self.canvas.delete("path", "highlight")
-        start_time = time.time()
+        # Reset state for fresh solve
+        self.canvas.delete("path", "highlight", "temp_path")
+        self.step_data = None
+        self.step_index = 0
+        self.is_solving = True
+        
+        # Use perf_counter for higher resolution
+        start_time = time.perf_counter()
         algorithm = self.algo_var.get()
-        mode = self.mode_var.get()
 
         if algorithm == "BFS":
             path, steps = self.bfs()
@@ -146,47 +149,52 @@ class MazeApp:
         else:  # A*
             path, steps = self.a_star()
 
-        end_time = time.time()
-        self.time_label.config(text=f"Time: {(end_time - start_time)*1000:.2f} ms")
+        end_time = time.perf_counter()
+        total_time = (end_time - start_time) * 1000  # Convert to milliseconds
+        self.time_label.config(text=f"Total Time: {total_time:.4f} ms")
+        
+        self.step_data = steps
+        self.animate_steps()
 
-        if mode == "Instant":
-            self.draw_path(path)
-        else:  # Step mode
-            self.step_data = steps
-            self.step_index = 0
-            self.step_button.config(state="normal")
-            self.next_step()
+    def animate_steps(self):
+        if not self.step_data or self.step_index >= len(self.step_data):
+            self.is_solving = False
+            return
 
-    def next_step(self):
-        if self.step_data and self.step_index < len(self.step_data):
-            self.canvas.delete("highlight")
-            # Updated to unpack 3 values instead of 2
-            current, considered, parent = self.step_data[self.step_index]
-            
-            # Highlight current node
-            x, y = current
+        self.canvas.delete("highlight", "temp_path")
+        current, considered, parent = self.step_data[self.step_index]
+        
+        # Highlight current node
+        x, y = current
+        self.canvas.create_rectangle(
+            y*self.cell_size, x*self.cell_size,
+            (y+1)*self.cell_size, (x+1)*self.cell_size,
+            fill="yellow", outline="", tags="highlight"
+        )
+
+        # Highlight considered nodes
+        for nx, ny in considered:
             self.canvas.create_rectangle(
-                y*self.cell_size, x*self.cell_size,
-                (y+1)*self.cell_size, (x+1)*self.cell_size,
-                fill="yellow", outline="", tags="highlight"
+                ny*self.cell_size, nx*self.cell_size,
+                (ny+1)*self.cell_size, (nx+1)*self.cell_size,
+                fill="orange", outline="", tags="highlight"
             )
 
-            # Highlight considered nodes
-            for nx, ny in considered:
-                self.canvas.create_rectangle(
-                    ny*self.cell_size, nx*self.cell_size,
-                    (ny+1)*self.cell_size, (nx+1)*self.cell_size,
-                    fill="orange", outline="", tags="highlight"
-                )
+        # Draw temporary path up to current node
+        temp_parent_dict = {n: p for n, _, p in self.step_data[:self.step_index + 1] if p is not None}
+        temp_parent_dict[(0, 0)] = None
+        temp_path = self.reconstruct_path(temp_parent_dict, current)
+        self.draw_temp_path(temp_path)
 
-            self.step_index += 1
-            if self.step_index == len(self.step_data):
-                self.step_button.config(state="disabled")
-                # Updated path reconstruction to use the parent from last step
-                final_parent_dict = {n: p for n, _, p in self.step_data if p is not None}
-                final_parent_dict[(0, 0)] = None  # Ensure start node is included
-                path = self.reconstruct_path(final_parent_dict, (self.graph.size-1, self.graph.size-1))
-                self.draw_path(path)
+        self.step_index += 1
+        if self.step_index == len(self.step_data):
+            final_parent_dict = {n: p for n, _, p in self.step_data if p is not None}
+            final_parent_dict[(0, 0)] = None
+            final_path = self.reconstruct_path(final_parent_dict, (self.graph.size-1, self.graph.size-1))
+            self.draw_path(final_path)
+            self.is_solving = False
+        else:
+            self.root.after(self.speed_var.get(), self.animate_steps)
 
     def bfs(self):
         size = self.graph.size
@@ -280,7 +288,7 @@ class MazeApp:
         current = end
         while current is not None:
             path.append(current)
-            current = parent[current]
+            current = parent.get(current)
         return path[::-1]
 
     def draw_path(self, path):
@@ -297,6 +305,22 @@ class MazeApp:
                 y2*self.cell_size + self.cell_size/2,
                 x2*self.cell_size + self.cell_size/2,
                 fill="blue", width=2, tags="path"
+            )
+
+    def draw_temp_path(self, path):
+        if not path:
+            return
+        
+        self.canvas.delete("temp_path")
+        for i in range(len(path)-1):
+            x1, y1 = path[i]
+            x2, y2 = path[i+1]
+            self.canvas.create_line(
+                y1*self.cell_size + self.cell_size/2,
+                x1*self.cell_size + self.cell_size/2,
+                y2*self.cell_size + self.cell_size/2,
+                x2*self.cell_size + self.cell_size/2,
+                fill="gray", width=2, tags="temp_path"
             )
 
 if __name__ == "__main__":
