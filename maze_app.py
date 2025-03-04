@@ -308,7 +308,8 @@ class MazeApp:
             return
             
         self.generation_running = True
-        size = int(self.size_var.get())
+        size = int(self.size_var.get())-1
+        size = size//2
         grid_size = self.initialize_grid(size)
         self.graph = Graph(size)
         
