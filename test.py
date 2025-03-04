@@ -62,33 +62,39 @@ class MazeApp:
 
         # Input frame
         input_frame = ttk.Frame(root, padding="10")
-        input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
 
-        ttk.Label(input_frame, text="Maze Size:").grid(row=0, column=0)
+        ttk.Label(input_frame, text="Maze Size:").grid(row=0, column=0, pady=2)
         self.size_var = tk.IntVar(value=10)
-        ttk.Entry(input_frame, textvariable=self.size_var).grid(row=0, column=1)
+        ttk.Entry(input_frame, textvariable=self.size_var).grid(row=0, column=1, pady=2)
         
-        ttk.Label(input_frame, text="Algorithm:").grid(row=1, column=0)
+        ttk.Label(input_frame, text="Algorithm:").grid(row=1, column=0, pady=2)
         self.algo_var = tk.StringVar(value="BFS")
         algo_combo = ttk.Combobox(input_frame, textvariable=self.algo_var, 
                                 values=["BFS", "Dijkstra", "A*"])
-        algo_combo.grid(row=1, column=1)
+        algo_combo.grid(row=1, column=1, pady=2)
 
-        ttk.Label(input_frame, text="Speed (ms):").grid(row=2, column=0)
+        ttk.Label(input_frame, text="Speed (ms):").grid(row=2, column=0, pady=2)
         self.speed_var = tk.IntVar(value=100)
-        ttk.Entry(input_frame, textvariable=self.speed_var).grid(row=2, column=1)
+        ttk.Entry(input_frame, textvariable=self.speed_var).grid(row=2, column=1, pady=2)
 
-        ttk.Button(input_frame, text="Generate Maze", command=self.generate_maze).grid(row=3, column=0)
-        ttk.Button(input_frame, text="Solve Maze", command=self.solve_maze).grid(row=3, column=1)
+        ttk.Button(input_frame, text="Generate Maze", command=self.generate_maze).grid(row=3, column=0, pady=2)
+        ttk.Button(input_frame, text="Solve Maze", command=self.solve_maze).grid(row=3, column=1, pady=2)
 
         self.time_label = ttk.Label(input_frame, text="Total Time: 0.0000 ms")
-        self.time_label.grid(row=4, column=0, columnspan=2)
+        self.time_label.grid(row=4, column=0, columnspan=2, pady=2)
 
         # Canvas for maze
-        self.cell_size = 30
-        self.canvas = tk.Canvas(root, width=300, height=300)
-        self.canvas.grid(row=1, column=0)
+        self.canvas_width = 800  # Fixed canvas width
+        self.canvas_height = 600  # Fixed canvas height (excluding input frame)
+        self.canvas = tk.Canvas(root, width=self.canvas_width, height=self.canvas_height)
+        self.canvas.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
+        self.root.columnconfigure(0, weight=1)
+        self.root.rowconfigure(1, weight=1)
+
+        self.cell_size = 30  # Initial value, will be adjusted
+        self.offset = 10     # Padding for border visibility
         self.graph = None
         self.step_data = None
         self.step_index = 0
@@ -97,7 +103,14 @@ class MazeApp:
     def generate_maze(self):
         size = self.size_var.get()
         self.canvas.delete("all")
-        self.canvas.config(width=size*self.cell_size, height=size*self.cell_size)
+        
+        # Calculate cell_size to fit maze within canvas with offset
+        available_width = self.canvas_width - 2 * self.offset
+        available_height = self.canvas_height - 2 * self.offset
+        self.cell_size = min(available_width // size, available_height // size)
+        
+        # Ensure cell_size is at least 10 for visibility
+        self.cell_size = max(self.cell_size, 10)
         
         self.graph = Graph(size)
         self.graph.generateSquareGraph()
@@ -109,10 +122,14 @@ class MazeApp:
 
     def draw_maze(self):
         size = self.graph.size
+        
+        # Draw internal walls with offset
         for i in range(size):
             for j in range(size):
-                x1, y1 = j * self.cell_size, i * self.cell_size
-                x2, y2 = x1 + self.cell_size, y1 + self.cell_size
+                x1 = j * self.cell_size + self.offset
+                y1 = i * self.cell_size + self.offset
+                x2 = x1 + self.cell_size
+                y2 = y1 + self.cell_size
                 
                 if ((i, j), (i, j+1)) not in self.graph.edges and j+1 < size:
                     self.canvas.create_line(x2, y1, x2, y2, fill="black")
@@ -123,29 +140,37 @@ class MazeApp:
                 if i == 0 or ((i, j), (i-1, j)) not in self.graph.edges:
                     self.canvas.create_line(x1, y1, x2, y1, fill="black")
 
-        #draw outer walls
-        border_width = 4  # Thickness of the outer border
+        # Draw thick outer border with offset
+        border_width = 4
         self.canvas.create_rectangle(
-            0, 0, size * self.cell_size, size * self.cell_size,
+            self.offset, self.offset, 
+            size * self.cell_size + self.offset, size * self.cell_size + self.offset,
             outline="black", width=border_width, tags="border"
         )
 
-        self.canvas.create_oval(5, 5, self.cell_size-5, self.cell_size-5, fill="green")
-        end_x = (size-1)*self.cell_size
-        self.canvas.create_oval(end_x+5, end_x+5, end_x+self.cell_size-5, 
-                              end_x+self.cell_size-5, fill="red")
+        # Draw start and end points with offset and scaled size
+        start_end_size = max(self.cell_size // 6, 5)  # Adjust size based on cell_size, min 5
+        self.canvas.create_oval(
+            self.offset + start_end_size, self.offset + start_end_size,
+            self.offset + self.cell_size - start_end_size, self.offset + self.cell_size - start_end_size,
+            fill="green"
+        )
+        end_x = (size - 1) * self.cell_size + self.offset
+        self.canvas.create_oval(
+            end_x + start_end_size, end_x + start_end_size,
+            end_x + self.cell_size - start_end_size, end_x + self.cell_size - start_end_size,
+            fill="red"
+        )
 
     def solve_maze(self):
         if not self.graph or self.is_solving:
             return
 
-        # Reset state for fresh solve
         self.canvas.delete("path", "highlight", "temp_path")
         self.step_data = None
         self.step_index = 0
         self.is_solving = True
         
-        # Use perf_counter for higher resolution
         start_time = time.perf_counter()
         algorithm = self.algo_var.get()
 
@@ -157,7 +182,7 @@ class MazeApp:
             path, steps = self.a_star()
 
         end_time = time.perf_counter()
-        total_time = (end_time - start_time) * 1000  # Convert to milliseconds
+        total_time = (end_time - start_time) * 1000
         self.time_label.config(text=f"Total Time: {total_time:.4f} ms")
         
         self.step_data = steps
@@ -171,23 +196,20 @@ class MazeApp:
         self.canvas.delete("highlight", "temp_path")
         current, considered, parent = self.step_data[self.step_index]
         
-        # Highlight current node
         x, y = current
         self.canvas.create_rectangle(
-            y*self.cell_size, x*self.cell_size,
-            (y+1)*self.cell_size, (x+1)*self.cell_size,
+            y * self.cell_size + self.offset, x * self.cell_size + self.offset,
+            (y + 1) * self.cell_size + self.offset, (x + 1) * self.cell_size + self.offset,
             fill="yellow", outline="", tags="highlight"
         )
 
-        # Highlight considered nodes
         for nx, ny in considered:
             self.canvas.create_rectangle(
-                ny*self.cell_size, nx*self.cell_size,
-                (ny+1)*self.cell_size, (nx+1)*self.cell_size,
+                ny * self.cell_size + self.offset, nx * self.cell_size + self.offset,
+                (ny + 1) * self.cell_size + self.offset, (nx + 1) * self.cell_size + self.offset,
                 fill="orange", outline="", tags="highlight"
             )
 
-        # Draw temporary path up to current node
         temp_parent_dict = {n: p for n, _, p in self.step_data[:self.step_index + 1] if p is not None}
         temp_parent_dict[(0, 0)] = None
         temp_path = self.reconstruct_path(temp_parent_dict, current)
@@ -307,10 +329,10 @@ class MazeApp:
             x1, y1 = path[i]
             x2, y2 = path[i+1]
             self.canvas.create_line(
-                y1*self.cell_size + self.cell_size/2,
-                x1*self.cell_size + self.cell_size/2,
-                y2*self.cell_size + self.cell_size/2,
-                x2*self.cell_size + self.cell_size/2,
+                y1 * self.cell_size + self.offset + self.cell_size/2,
+                x1 * self.cell_size + self.offset + self.cell_size/2,
+                y2 * self.cell_size + self.offset + self.cell_size/2,
+                x2 * self.cell_size + self.offset + self.cell_size/2,
                 fill="blue", width=2, tags="path"
             )
 
@@ -323,11 +345,11 @@ class MazeApp:
             x1, y1 = path[i]
             x2, y2 = path[i+1]
             self.canvas.create_line(
-                y1*self.cell_size + self.cell_size/2,
-                x1*self.cell_size + self.cell_size/2,
-                y2*self.cell_size + self.cell_size/2,
-                x2*self.cell_size + self.cell_size/2,
-                fill="gray", width=2, tags="temp_path"
+                y1 * self.cell_size + self.offset + self.cell_size/2,
+                x1 * self.cell_size + self.offset + self.cell_size/2,
+                y2 * self.cell_size + self.offset + self.cell_size/2,
+                x2 * self.cell_size + self.offset + self.cell_size/2,
+                fill="red", width=2, tags="temp_path"
             )
 
 if __name__ == "__main__":
