@@ -1,136 +1,175 @@
 import cv2
+import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
+from skimage.morphology import skeletonize
 
-from maze_classes import Graph, Node
 
-
-class VisionHandler:
+class MazeSolver:
     def __init__(self, image_path):
-        self.image = cv2.imread(image_path)
-        if self.image is None:
-            raise ValueError(f"Failed to load image: {image_path}")
-        self.height, self.width = self.image.shape[:2]
-        self.binary = None
-        self.grid_size = None
-        self.cell_size = None
-
+        """
+        Initialize the MazeSolver with the maze image
+        
+        :param image_path: Path to the maze image file
+        """
+        # Read the image
+        self.original_image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        
+        # Validate image loading
+        if self.original_image is None:
+            raise ValueError("Could not read the image file")
+        
+        # Image preprocessing attributes
+        self.binary_image = None
+        self.skeleton = None
+        self.maze_graph = nx.Graph()
+    
     def preprocess_image(self):
-        """Convert to grayscale and threshold to binary."""
-        gray = cv2.cvtColor(self.image, cv2.COLOR_BGR2GRAY)
-        _, binary = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY_INV)
-        self.binary = binary
-        return binary
-
-    def detect_cell_size(self):
-        """Identify the nearest two vertical lines to determine cell width/height."""
-        binary = self.binary
+        """
+        Preprocess the maze image:
+        1. Apply Otsu's thresholding
+        2. Skeletonize the image
+        """
+        # Apply Otsu's thresholding
+        _, self.binary_image = cv2.threshold(
+            self.original_image, 
+            0, 255, 
+            cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+        )
         
-        # Use a horizontal profile (middle row) to detect vertical lines
-        mid_row = binary[self.height // 2, :]
-        transitions = []
+        # Skeletonize the image using scikit-image
+        self.skeleton = skeletonize(self.binary_image // 255)
         
-        # Find transitions from white (255) to black (0) or vice versa
-        for x in range(1, len(mid_row)):
-            if mid_row[x-1] != mid_row[x]:
-                transitions.append(x)
+        return self.skeleton
+    
+    def create_maze_graph(self):
+        """
+        Convert maze to graph representation using skeletonization
+        """
+        height, width = self.skeleton.shape
         
-        # Find the smallest distance between two consecutive transitions (cell width)
-        if len(transitions) < 2:
-            raise ValueError("Could not detect enough vertical lines in the image")
+        # Find junction and endpoint pixels
+        def get_neighbor_count(x, y):
+            """Count white neighbors in 8-connectivity"""
+            count = 0
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    nx, ny = x + dx, y + dy
+                    if (0 <= nx < width and 0 <= ny < height and 
+                        self.skeleton[ny, nx] and 
+                        not (dx == 0 and dy == 0)):
+                        count += 1
+            return count
         
-        distances = [transitions[i+1] - transitions[i] for i in range(len(transitions)-1)]
-        self.cell_size = min(distances)  # Assume smallest consistent gap is cell size
+        # Find junction and endpoint nodes
+        nodes = []
+        for y in range(height):
+            for x in range(width):
+                if self.skeleton[y, x]:
+                    neighbor_count = get_neighbor_count(x, y)
+                    # Junctions have 3 or more neighbors, endpoints have 1
+                    if neighbor_count != 2:
+                        nodes.append((x, y))
         
-        # Estimate grid size based on image dimensions
-        self.grid_size = min(self.width // self.cell_size, self.height // self.cell_size)
-        return self.cell_size, self.grid_size
-
-    def overlay_grid(self):
-        """Overlay a grid on the binary image for visualization and analysis."""
-        binary_with_grid = cv2.cvtColor(self.binary, cv2.COLOR_GRAY2BGR)
+        # Add nodes to graph
+        self.maze_graph.add_nodes_from(nodes)
         
-        # Draw vertical lines
-        for j in range(self.grid_size + 1):
-            x = j * self.cell_size
-            cv2.line(binary_with_grid, (x, 0), (x, self.height), (0, 255, 0), 1)
+        # Connect nodes
+        for i, node1 in enumerate(nodes):
+            for node2 in nodes[i+1:]:
+                if self._trace_path(node1, node2):
+                    # Calculate path length
+                    path_length = self._calculate_path_length(node1, node2)
+                    self.maze_graph.add_edge(node1, node2, weight=path_length)
         
-        # Draw horizontal lines
-        for i in range(self.grid_size + 1):
-            y = i * self.cell_size
-            cv2.line(binary_with_grid, (0, y), (self.width, y), (0, 255, 0), 1)
+        return self.maze_graph
+    
+    def _trace_path(self, start, end):
+        """
+        Trace a path between two points using breadth-first search on skeleton
+        """
+        if start == end:
+            return False
         
-        # Optional: Save or display the grid overlay for debugging
-        # cv2.imwrite("grid_overlay.png", binary_with_grid)
-        return binary_with_grid
-
-    def analyze_grid(self):
-        """Analyze the binary image with the overlaid grid to detect walls."""
-        edges = set()
+        height, width = self.skeleton.shape
+        visited = np.zeros_like(self.skeleton, dtype=bool)
+        queue = [(start[0], start[1])]
+        visited[start[1], start[0]] = True
         
-        for i in range(self.grid_size):
-            for j in range(self.grid_size):
-                x1 = j * self.cell_size
-                y1 = i * self.cell_size
-                x2 = x1 + self.cell_size
-                y2 = y1 + self.cell_size
+        # Possible 8-connectivity movements
+        directions = [
+            (0, 1), (0, -1), (1, 0), (-1, 0),
+            (1, 1), (1, -1), (-1, 1), (-1, -1)
+        ]
+        
+        # Limit search to prevent infinite loops
+        max_steps = 500
+        steps = 0
+        
+        while queue and steps < max_steps:
+            x, y = queue.pop(0)
+            steps += 1
+            
+            # Check if reached end point
+            if (x, y) == end:
+                return True
+            
+            # Explore neighbors
+            for dx, dy in directions:
+                nx, ny = x + dx, y + dy
                 
-                # Check right border
-                if j + 1 < self.grid_size:
-                    right_region = self.binary[y1:y2, x2-2:x2+2]
-                    if np.mean(right_region) > 128:  # Wall present (black in inverted binary)
-                        pass
-                    else:
-                        edges.add(((i, j), (i, j+1)))
-                        edges.add(((i, j+1), (i, j)))
-                
-                # Check bottom border
-                if i + 1 < self.grid_size:
-                    bottom_region = self.binary[y2-2:y2+2, x1:x2]
-                    if np.mean(bottom_region) > 128:  # Wall present
-                        pass
-                    else:
-                        edges.add(((i, j), (i+1, j)))
-                        edges.add(((i+1, j), (i, j)))
+                # Check bounds and unvisited skeleton pixels
+                if (0 <= nx < width and 0 <= ny < height and 
+                    self.skeleton[ny, nx] and 
+                    not visited[ny, nx]):
+                    queue.append((nx, ny))
+                    visited[ny, nx] = True
         
-        return edges
+        return False
+    
+    def _calculate_path_length(self, start, end):
+        """
+        Calculate Manhattan distance between two points
+        """
+        return abs(start[0] - end[0]) + abs(start[1] - end[1])
+    
+    def visualize_graph(self):
+        """
+        Visualize the maze graph
+        """
+        plt.figure(figsize=(15, 15))
+        
+        # Plot original skeleton
+        plt.subplot(121)
+        plt.imshow(self.skeleton, cmap='binary')
+        plt.title("Maze Skeleton")
+        
+        # Plot graph
+        plt.subplot(122)
+        pos = {node: node for node in self.maze_graph.nodes()}
+        nx.draw(
+            self.maze_graph, 
+            pos, 
+            with_labels=True, 
+            node_color='red', 
+            node_size=50, 
+            font_size=8
+        )
+        plt.title("Maze Graph Representation")
+        
+        plt.tight_layout()
+        plt.show()
+        
+        # Print graph information
+        print(f"Number of nodes: {self.maze_graph.number_of_nodes()}")
+        print(f"Number of edges: {self.maze_graph.number_of_edges()}")
 
-    def detect_start_end(self):
-        """Detect green (start) and red (end) points."""
-        hsv = cv2.cvtColor(self.image, cv2.COLOR_BGR2HSV)
-        
-        green_lower = np.array([35, 100, 100])
-        green_upper = np.array([85, 255, 255])
-        green_mask = cv2.inRange(hsv, green_lower, green_upper)
-        green_y, green_x = np.where(green_mask > 0)
-        start = (green_y[0] // self.cell_size, green_x[0] // self.cell_size) if green_y.size > 0 else (0, 0)
-        
-        red_lower1 = np.array([0, 100, 100])
-        red_upper1 = np.array([10, 255, 255])
-        red_lower2 = np.array([170, 100, 100])
-        red_upper2 = np.array([180, 255, 255])
-        red_mask = cv2.inRange(hsv, red_lower1, red_upper1) | cv2.inRange(hsv, red_lower2, red_upper2)
-        red_y, red_x = np.where(red_mask > 0)
-        end = (red_y[0] // self.cell_size, red_x[0] // self.cell_size) if red_y.size > 0 else (self.grid_size-1, self.grid_size-1)
-        
-        return start, end
-
-    def image_to_graph(self):
-        """Convert image to Graph object."""
-        self.preprocess_image()
-        self.detect_cell_size()
-        
-        self.graph = Graph(self.grid_size)
-        self.graph.edges = self.analyze_grid()
-        
-        # Optional: Overlay grid for debugging (not needed for graph generation)
-        # self.overlay_grid()
-        
-        start, end = self.detect_start_end()
-        return self.graph, start, end
+# Example usage
+def main():
+    maze_solver = MazeSolver('maze2.jpg')
+    maze_solver.preprocess_image()
+    maze_solver.create_maze_graph()
+    maze_solver.visualize_graph()
 
 if __name__ == "__main__":
-    handler = VisionHandler("sample_maze.png")
-    graph, start, end = handler.image_to_graph()
-    print(f"Grid Size: {graph.size}x{graph.size}")
-    print(f"Edges: {len(graph.edges)}")
-    print(f"Start: {start}, End: {end}")
+    main()
