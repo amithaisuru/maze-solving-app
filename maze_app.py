@@ -1,56 +1,120 @@
 import heapq
 import time
 import tkinter as tk
-from collections import deque  # Added this import
+from collections import deque
 from tkinter import filedialog, ttk
 
 import cv2
 
 from maze_classes import Graph
-from vision_handler import detect_lines  # Added this import
+from vision_handler import detect_lines
 
 
 class MazeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Maze Generator and Solver")
-
-        # Input frame
-        input_frame = ttk.Frame(root, padding="10")
-        input_frame.grid(row=0, column=0, sticky=(tk.W, tk.E))
-
-        ttk.Label(input_frame, text="Maze Size:").grid(row=0, column=0, pady=2)
-        self.size_var = tk.IntVar(value=10)
-        ttk.Entry(input_frame, textvariable=self.size_var).grid(row=0, column=1, pady=2)
+        self.root.configure(bg="#f5f5f7")  # Light background color
         
-        ttk.Label(input_frame, text="Algorithm:").grid(row=1, column=0, pady=2)
+        # Apply modern theme
+        style = ttk.Style()
+        style.theme_use("clam")  # Using clam as base theme
+        
+        # Configure styles
+        style.configure("TFrame", background="#f5f5f7")
+        style.configure("TLabel", background="#f5f5f7", font=("Segoe UI", 10))
+        style.configure("TButton", font=("Segoe UI", 10, "bold"), padding=6)
+        style.configure("TEntry", font=("Segoe UI", 10))
+        style.configure("TCombobox", font=("Segoe UI", 10))
+        
+        # Main container frame
+        main_frame = ttk.Frame(root, padding="20")
+        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Title
+        title_label = ttk.Label(main_frame, text="Maze Solver", font=("Segoe UI", 18, "bold"))
+        title_label.grid(row=0, column=0, columnspan=2, pady=(0, 20), sticky=tk.W)
+        
+        # Left panel for controls
+        control_frame = ttk.Frame(main_frame, padding="10")
+        control_frame.grid(row=1, column=0, sticky=(tk.N, tk.W), padx=(0, 20))
+        
+        # Controls section header
+        controls_header = ttk.Label(control_frame, text="CONTROLS", font=("Segoe UI", 12, "bold"))
+        controls_header.grid(row=0, column=0, columnspan=2, pady=(0, 15), sticky=tk.W)
+        
+        # Input frame with modern spacing and grouping
+        input_frame = ttk.Frame(control_frame)
+        input_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        
+        # Size input
+        ttk.Label(input_frame, text="Maze Size:").grid(row=0, column=0, pady=10, sticky=tk.W)
+        self.size_var = tk.IntVar(value=10)
+        size_entry = ttk.Entry(input_frame, textvariable=self.size_var, width=10)
+        size_entry.grid(row=0, column=1, pady=10, padx=(10, 0), sticky=tk.W)
+        
+        # Algorithm selection
+        ttk.Label(input_frame, text="Algorithm:").grid(row=1, column=0, pady=10, sticky=tk.W)
         self.algo_var = tk.StringVar(value="BFS")
         algo_combo = ttk.Combobox(input_frame, textvariable=self.algo_var, 
-                                values=["BFS", "Dijkstra", "A*"])
-        algo_combo.grid(row=1, column=1, pady=2)
-
-        ttk.Label(input_frame, text="Speed (ms):").grid(row=2, column=0, pady=2)
+                                values=["BFS", "Dijkstra", "A*"], width=10, state="readonly")
+        algo_combo.grid(row=1, column=1, pady=10, padx=(10, 0), sticky=tk.W)
+        
+        # Speed input
+        ttk.Label(input_frame, text="Speed (ms):").grid(row=2, column=0, pady=10, sticky=tk.W)
         self.speed_var = tk.IntVar(value=100)
-        ttk.Entry(input_frame, textvariable=self.speed_var).grid(row=2, column=1, pady=2)
-
-        ttk.Button(input_frame, text="Generate Maze", command=self.generate_maze).grid(row=3, column=0, pady=2)
-        ttk.Button(input_frame, text="Solve Maze", command=self.solve_maze).grid(row=3, column=1, pady=2)
-        ttk.Button(input_frame, text="Load Image", command=self.load_image).grid(row=3, column=2, pady=2)
-
-        self.time_label = ttk.Label(input_frame, text="Total Time: 0.0000 ms")
-        self.time_label.grid(row=4, column=0, columnspan=3, pady=2)
-
-        # Canvas for maze
+        speed_entry = ttk.Entry(input_frame, textvariable=self.speed_var, width=10)
+        speed_entry.grid(row=2, column=1, pady=10, padx=(10, 0), sticky=tk.W)
+        
+        # Buttons section
+        button_frame = ttk.Frame(control_frame)
+        button_frame.grid(row=2, column=0, pady=20, sticky=tk.W)
+        
+        # Create styled buttons
+        style.configure("Generate.TButton", background="#4CAF50")
+        style.configure("Solve.TButton", background="#2196F3")
+        style.configure("Load.TButton", background="#FF9800")
+        
+        generate_btn = ttk.Button(button_frame, text="Generate Maze", command=self.generate_maze, style="Generate.TButton")
+        generate_btn.grid(row=0, column=0, pady=5, sticky=tk.W)
+        
+        solve_btn = ttk.Button(button_frame, text="Solve Maze", command=self.solve_maze, style="Solve.TButton")
+        solve_btn.grid(row=1, column=0, pady=5, sticky=tk.W)
+        
+        load_btn = ttk.Button(button_frame, text="Load Image", command=self.load_image, style="Load.TButton")
+        load_btn.grid(row=2, column=0, pady=5, sticky=tk.W)
+        
+        # Stats section
+        stats_frame = ttk.Frame(control_frame, padding=(0, 20, 0, 0))
+        stats_frame.grid(row=3, column=0, sticky=tk.W)
+        
+        stats_header = ttk.Label(stats_frame, text="STATISTICS", font=("Segoe UI", 12, "bold"))
+        stats_header.grid(row=0, column=0, pady=(0, 10), sticky=tk.W)
+        
+        self.time_label = ttk.Label(stats_frame, text="Total Time: 0.0000 ms", font=("Segoe UI", 10))
+        self.time_label.grid(row=1, column=0, pady=5, sticky=tk.W)
+        
+        # Canvas for maze - in a frame with border
+        canvas_frame = ttk.Frame(main_frame, padding=2, relief="solid", borderwidth=1)
+        canvas_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
         self.canvas_width = 800
         self.canvas_height = 600
-        self.canvas = tk.Canvas(root, width=self.canvas_width, height=self.canvas_height)
-        self.canvas.grid(row=1, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-
+        self.canvas = tk.Canvas(canvas_frame, width=self.canvas_width, height=self.canvas_height, 
+                               bg="white", highlightthickness=0)
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+        
+        # Make the UI responsive
         self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(1, weight=1)
-
+        self.root.rowconfigure(0, weight=1)
+        main_frame.columnconfigure(1, weight=1)
+        main_frame.rowconfigure(1, weight=1)
+        
+        # Set minimum window size
+        self.root.minsize(1000, 700)
+        
         self.cell_size = 30
-        self.offset = 10
+        self.offset = 20  # Increased offset for better spacing
         self.graph = None
         self.step_data = None
         self.step_index = 0
@@ -98,7 +162,18 @@ class MazeApp:
 
     def draw_maze(self):
         size = self.graph.size
-                
+        
+        # Draw a subtle grid background
+        for i in range(size + 1):
+            x = i * self.cell_size + self.offset
+            y = i * self.cell_size + self.offset
+            if i < size:
+                # Horizontal and vertical subtle grid lines
+                self.canvas.create_line(self.offset, y, size * self.cell_size + self.offset, y, 
+                                      fill="#f0f0f0", width=1, tags="grid")
+                self.canvas.create_line(x, self.offset, x, size * self.cell_size + self.offset, 
+                                      fill="#f0f0f0", width=1, tags="grid")
+        
         for i in range(size):
             for j in range(size):
                 x1 = j * self.cell_size + self.offset
@@ -109,29 +184,31 @@ class MazeApp:
                 line_width = 2
                 
                 if ((i, j), (i, j+1)) not in self.graph.edges and j+1 < size:
-                    self.canvas.create_line(x2, y1, x2, y2, fill="black", width=line_width)
+                    self.canvas.create_line(x2, y1, x2, y2, fill="#333333", width=line_width)
                 if ((i, j), (i+1, j)) not in self.graph.edges and i+1 < size:
-                    self.canvas.create_line(x1, y2, x2, y2, fill="black", width=line_width)
+                    self.canvas.create_line(x1, y2, x2, y2, fill="#333333", width=line_width)
                 if j == 0 or ((i, j), (i, j-1)) not in self.graph.edges:
-                    self.canvas.create_line(x1, y1, x1, y2, fill="black", width=line_width)
+                    self.canvas.create_line(x1, y1, x1, y2, fill="#333333", width=line_width)
                 if i == 0 or ((i, j), (i-1, j)) not in self.graph.edges:
-                    self.canvas.create_line(x1, y1, x2, y1, fill="black", width=line_width)
+                    self.canvas.create_line(x1, y1, x2, y1, fill="#333333", width=line_width)
 
-        border_width = 4
+        # Draw thicker border
+        border_width = 3
         self.canvas.create_rectangle(
             self.offset, self.offset, 
             size * self.cell_size + self.offset, size * self.cell_size + self.offset,
-            outline="black", width=border_width, tags="border"
+            outline="#111111", width=border_width, tags="border"
         )
 
-        start_end_size = max(self.cell_size // 6, 5)
+        # Draw start and end points with smoother circles
+        start_end_size = max(self.cell_size // 5, 6)
         sx, sy = self.start
         self.canvas.create_oval(
             sy * self.cell_size + self.offset + start_end_size,
             sx * self.cell_size + self.offset + start_end_size,
             sy * self.cell_size + self.offset + self.cell_size - start_end_size,
             sx * self.cell_size + self.offset + self.cell_size - start_end_size,
-            fill="green"
+            fill="#4CAF50", outline="#2E7D32", width=2
         )
         ex, ey = self.end
         self.canvas.create_oval(
@@ -139,7 +216,7 @@ class MazeApp:
             ex * self.cell_size + self.offset + start_end_size,
             ey * self.cell_size + self.offset + self.cell_size - start_end_size,
             ex * self.cell_size + self.offset + self.cell_size - start_end_size,
-            fill="red"
+            fill="#F44336", outline="#C62828", width=2
         )
 
     def solve_maze(self):
@@ -177,17 +254,18 @@ class MazeApp:
         current, considered, parent = self.step_data[self.step_index]
         
         x, y = current
+        # Use semi-transparent colors for better visibility
         self.canvas.create_rectangle(
-            y * self.cell_size + self.offset, x * self.cell_size + self.offset,
-            (y + 1) * self.cell_size + self.offset, (x + 1) * self.cell_size + self.offset,
-            fill="yellow", outline="", tags="highlight"
+            y * self.cell_size + self.offset + 1, x * self.cell_size + self.offset + 1,
+            (y + 1) * self.cell_size + self.offset - 1, (x + 1) * self.cell_size + self.offset - 1,
+            fill="#FFF59D", outline="", tags="highlight"
         )
 
         for nx, ny in considered:
             self.canvas.create_rectangle(
-                ny * self.cell_size + self.offset, nx * self.cell_size + self.offset,
-                (ny + 1) * self.cell_size + self.offset, (nx + 1) * self.cell_size + self.offset,
-                fill="orange", outline="", tags="highlight"
+                ny * self.cell_size + self.offset + 1, nx * self.cell_size + self.offset + 1,
+                (ny + 1) * self.cell_size + self.offset - 1, (nx + 1) * self.cell_size + self.offset - 1,
+                fill="#FFCC80", outline="", tags="highlight"
             )
 
         temp_parent_dict = {n: p for n, _, p in self.step_data[:self.step_index + 1] if p is not None}
@@ -207,7 +285,7 @@ class MazeApp:
 
     def bfs(self):
         size = self.graph.size
-        queue = deque([self.start])  # Now deque is defined
+        queue = deque([self.start])
         visited = {self.start}
         parent = {self.start: None}
         steps = []
@@ -306,15 +384,28 @@ class MazeApp:
             return
         
         self.canvas.delete("path")
+        
+        # Draw a glowing path effect
         for i in range(len(path)-1):
             x1, y1 = path[i]
             x2, y2 = path[i+1]
+            
+            # Draw a wider shadow for glow effect
             self.canvas.create_line(
                 y1 * self.cell_size + self.offset + self.cell_size/2,
                 x1 * self.cell_size + self.offset + self.cell_size/2,
                 y2 * self.cell_size + self.offset + self.cell_size/2,
                 x2 * self.cell_size + self.offset + self.cell_size/2,
-                fill="blue", width=2, tags="path"
+                fill="#90CAF9", width=5, tags="path"
+            )
+            
+            # Draw the main path
+            self.canvas.create_line(
+                y1 * self.cell_size + self.offset + self.cell_size/2,
+                x1 * self.cell_size + self.offset + self.cell_size/2,
+                y2 * self.cell_size + self.offset + self.cell_size/2,
+                x2 * self.cell_size + self.offset + self.cell_size/2,
+                fill="#2196F3", width=3, tags="path"
             )
 
     def draw_temp_path(self, path):
@@ -325,12 +416,14 @@ class MazeApp:
         for i in range(len(path)-1):
             x1, y1 = path[i]
             x2, y2 = path[i+1]
+            
+            # Draw the thinner temporary path
             self.canvas.create_line(
                 y1 * self.cell_size + self.offset + self.cell_size/2,
                 x1 * self.cell_size + self.offset + self.cell_size/2,
                 y2 * self.cell_size + self.offset + self.cell_size/2,
                 x2 * self.cell_size + self.offset + self.cell_size/2,
-                fill="red", width=2, tags="temp_path"
+                fill="#FF5722", width=2, tags="temp_path"
             )
 
 if __name__ == "__main__":
