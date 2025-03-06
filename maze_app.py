@@ -4,8 +4,10 @@ import tkinter as tk
 from collections import deque  # Added this import
 from tkinter import filedialog, ttk
 
-from maze_classes import Graph, Node
-from vision_handler import VisionHandler
+import cv2
+
+from maze_classes import Graph
+from vision_handler import detect_lines  # Added this import
 
 
 class MazeApp:
@@ -77,10 +79,11 @@ class MazeApp:
 
     def load_image(self):
         file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.png *.jpg *.jpeg")])
+        image = cv2.imread(file_path)
         if file_path:
-            handler = VisionHandler(file_path)
-            self.graph, self.start, self.end = handler.image_to_graph()
-            
+            self.graph =  detect_lines(image)
+            self.start, self.end = (0, 0), (self.graph.size-1, self.graph.size-1)
+
             available_width = self.canvas_width - 2 * self.offset
             available_height = self.canvas_height - 2 * self.offset
             self.cell_size = min(available_width // self.graph.size, available_height // self.graph.size)
@@ -95,6 +98,7 @@ class MazeApp:
 
     def draw_maze(self):
         size = self.graph.size
+        self.graph.printEdges()
         
         for i in range(size):
             for j in range(size):
