@@ -50,8 +50,6 @@ class Graph:
             if neighbors:
                 next_x, next_y = random.choice(neighbors)
                 self.addEdge(current_x, current_y, next_x, next_y)
-                # self.edges.add(((current_x, current_y), (next_x, next_y)))
-                # self.edges.add(((next_x, next_y), (current_x, current_y)))
                 self.nodes[next_x][next_y].visited = True
                 stack.append((next_x, next_y))
             else:
