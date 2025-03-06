@@ -1,10 +1,7 @@
-import math
-import os
-
 import cv2
 import numpy as np
 
-from maze_classes import Graph, Node
+from maze_classes import Graph
 
 
 def seperate_lines(lines):

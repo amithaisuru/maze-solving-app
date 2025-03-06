@@ -28,7 +28,6 @@ class Graph:
             self.edges.add(((x1, y1), (x2, y2)))
             self.edges.add(((x2, y2), (x1, y1)))
             self.nodes[x2][y2].visited = True
-            print(x1,y1,x2,y2, "edge added")
 
     def generateSquareGraph(self):
         def get_unvisited_neighbors(x, y):
