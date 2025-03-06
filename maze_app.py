@@ -106,15 +106,17 @@ class MazeApp:
                 y1 = i * self.cell_size + self.offset
                 x2 = x1 + self.cell_size
                 y2 = y1 + self.cell_size
+
+                line_width = 2
                 
                 if ((i, j), (i, j+1)) not in self.graph.edges and j+1 < size:
-                    self.canvas.create_line(x2, y1, x2, y2, fill="black")
+                    self.canvas.create_line(x2, y1, x2, y2, fill="black", width=line_width)
                 if ((i, j), (i+1, j)) not in self.graph.edges and i+1 < size:
-                    self.canvas.create_line(x1, y2, x2, y2, fill="black")
+                    self.canvas.create_line(x1, y2, x2, y2, fill="black", width=line_width)
                 if j == 0 or ((i, j), (i, j-1)) not in self.graph.edges:
-                    self.canvas.create_line(x1, y1, x1, y2, fill="black")
+                    self.canvas.create_line(x1, y1, x1, y2, fill="black", width=line_width)
                 if i == 0 or ((i, j), (i-1, j)) not in self.graph.edges:
-                    self.canvas.create_line(x1, y1, x2, y1, fill="black")
+                    self.canvas.create_line(x1, y1, x2, y1, fill="black", width=line_width)
 
         border_width = 4
         self.canvas.create_rectangle(
