@@ -98,8 +98,7 @@ class MazeApp:
 
     def draw_maze(self):
         size = self.graph.size
-        self.graph.printEdges()
-        
+                
         for i in range(size):
             for j in range(size):
                 x1 = j * self.cell_size + self.offset
