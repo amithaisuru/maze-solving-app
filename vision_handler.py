@@ -117,26 +117,7 @@ def detect_lines(src_image):
 
     horizontal_lines, vertical_lines = seperate_lines(lines)
 
-    m,n = get_grid_size(horizontal_lines, vertical_lines)
-    x,y = get_top_left_point(horizontal_lines, vertical_lines)
-    cell_size = get_cell_size(horizontal_lines, vertical_lines)
-
     return generate_graph(binary, horizontal_lines, vertical_lines)
-    
-    #draw point on x,y
-    cv2.circle(binary, (x,y), 5, (0,0,255), -1)
-    cv2.imshow('image', binary)
-    cv2.waitKey(0)
-
-    # Draw line1 on the image
-    new_lines = horizontal_lines + vertical_lines
-    for line in new_lines:
-        x1, y1, x2, y2 = line[0]
-        cv2.line(binary, (x1, y1), (x2, y2), (0, 0, 255), 1)
-
-    # Display the image
-    cv2.imshow('image', binary)
-    cv2.waitKey(0) 
 
 def generate_graph(binary_image, horizontal_lines, vertical_lines):
 
@@ -145,6 +126,9 @@ def generate_graph(binary_image, horizontal_lines, vertical_lines):
     cell_size = get_cell_size(horizontal_lines, vertical_lines)[0]
     x_values = get_x_values_of_vertical_lines(vertical_lines)
     y_values = get_y_values_of_horizontal_lines(horizontal_lines)
+    #remove first value from x_values and y_values
+    x_values = x_values[1:]
+    y_values = y_values[1:]
     
     n = graph_size  # Single integer for square grid
     graph = Graph(graph_size)  # Assuming Graph(n) initializes an n x n grid of Nodes
@@ -155,7 +139,7 @@ def generate_graph(binary_image, horizontal_lines, vertical_lines):
     y_start = y0 + cell_size//2
     for i in range(n):
         for j in range(n-1):
-            x = x_start + j * cell_size
+            x = x_values[j]
             y = y_start + i * cell_size
             if binary_image[y, x] == 0:
                 graph.addEdge(i, j, i, j+1)
@@ -166,11 +150,8 @@ def generate_graph(binary_image, horizontal_lines, vertical_lines):
     for i in range(n-1):
         for j in range(n):
             x = x_start + j * cell_size
-            y = y_start + i * cell_size
+            y = y_values[i]
             if binary_image[y, x] == 0:
                 graph.addEdge(i, j, i+1, j)
     
     return graph
-
-image = cv2.imread('maze1.jpg')
-detect_lines(image)
