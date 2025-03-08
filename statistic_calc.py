@@ -5,22 +5,19 @@ from maze_app import Graph, MazeApp
 
 
 def solve_graph(maze_app, graph, algorithm):
-    """
-    Solve the graph using the specified algorithm from MazeApp and return the time taken.
-    """
     maze_app.graph = graph
     
     if algorithm == "BFS":
         start_time = time.perf_counter()
-        path, _ = maze_app.bfs()
+        maze_app.bfs()
         end_time = time.perf_counter()
     elif algorithm == "Dijkstra":
         start_time = time.perf_counter()
-        path, _ = maze_app.dijkstra()
+        maze_app.dijkstra()
         end_time = time.perf_counter()
     elif algorithm == "A*":
         start_time = time.perf_counter()
-        path, _ = maze_app.a_star()
+        maze_app.a_star()
         end_time = time.perf_counter()
     else:
         raise ValueError("Unknown algorithm")
@@ -28,9 +25,6 @@ def solve_graph(maze_app, graph, algorithm):
     return (end_time - start_time) * 1000  # Return time in milliseconds
 
 def collect_statistics(num_graphs, maze_size):
-    """
-    Generate 'num_graphs' mazes of 'maze_size' and calculate average times.
-    """
     root = tk.Tk()
     maze_app = MazeApp(root)
     root.withdraw()  # Hide the Tkinter window
@@ -47,8 +41,6 @@ def collect_statistics(num_graphs, maze_size):
         for algo in algorithms:
             time_taken = solve_graph(maze_app, graph, algo)
             total_times[algo] += time_taken
-        
-        #print(f"Graph {i+1}/{num_graphs} completed")
     
     # Calculate averages
     avg_times = {algo: total_times[algo] / num_graphs for algo in algorithms}
@@ -62,7 +54,7 @@ def collect_statistics(num_graphs, maze_size):
     root.destroy()
 
 if __name__ == "__main__":
-    num_graphs = 100    # Number of mazes to generate
+    num_graphs = 100 
     
     maze_size = 9 
     print(f"Running analysis for {num_graphs} mazes of size {maze_size}x{maze_size}...")

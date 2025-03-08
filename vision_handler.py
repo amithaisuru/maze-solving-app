@@ -1,3 +1,6 @@
+"""
+Computer Vision and Image Processing Module
+"""
 import cv2
 import numpy as np
 
@@ -26,7 +29,7 @@ def seperate_lines(lines):
         if len(new_horizontal_lines) == 0:
             new_horizontal_lines.append(line)
         else:
-            x1_, y1_, x2_, y2_ = new_horizontal_lines[-1][0]
+            x1_, y1_, _, _ = new_horizontal_lines[-1][0]
             if abs(y1 - y1_) > 5:
                 new_horizontal_lines.append(line)
     
@@ -35,7 +38,7 @@ def seperate_lines(lines):
         if len(new_vertical_lines) == 0:
             new_vertical_lines.append(line)
         else:
-            x1_, y1_, x2_, y2_ = new_vertical_lines[-1][0]
+            x1_, y1_, _, _ = new_vertical_lines[-1][0]
             if abs(x1 - x1_) > 5:
                 new_vertical_lines.append(line)
     
@@ -74,14 +77,14 @@ def get_grid_size(horizontal_lines, vertical_lines):
 def get_x_values_of_vertical_lines(vertical_lines):
     x_values = []
     for line in vertical_lines:
-        x1, y1, x2, y2 = line[0]
+        x1, _, _, _ = line[0]
         x_values.append(x1)
     return x_values
 
 def get_y_values_of_horizontal_lines(horizontal_lines):
     y_values = []
     for line in horizontal_lines:
-        x1, y1, x2, y2 = line[0]
+        _, y1, _, _ = line[0]
         y_values.append(y1)
     return y_values
 
@@ -96,7 +99,7 @@ def detect_lines(src_image):
     gray = cv2.cvtColor(src_image, cv2.COLOR_BGR2GRAY)
 
     #coverting to binary image
-    _, binary = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
+    _, binary = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY_INV)
 
     #morphological closing 
     kernel = np.ones((5,5),np.uint8)
@@ -113,7 +116,7 @@ def detect_lines(src_image):
     lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=10, minLineLength=10, maxLineGap=10)
 
     horizontal_lines, vertical_lines = seperate_lines(lines)
-    return generate_graph(binary, horizontal_lines, vertical_lines)
+    return generate_graph(binary, horizontal_lines, vertical_lines), src_image
 
 def generate_graph(binary_image, horizontal_lines, vertical_lines):
 
@@ -126,7 +129,7 @@ def generate_graph(binary_image, horizontal_lines, vertical_lines):
     y_values = y_values[1:]
     
     n = graph_size  # Single integer for square grid
-    graph = Graph(graph_size)  # Assuming Graph(n) initializes an n x n grid of Nodes
+    graph = Graph(graph_size)
 
     #horizontal edges
     for i in range(n):

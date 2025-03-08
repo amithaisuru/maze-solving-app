@@ -20,7 +20,6 @@ class Graph:
             print(f"Edge: {edge[0]} -> {edge[1]}")
     
     def addEdge(self, x1, y1, x2, y2):
-        """Add an edge between node at position (x1, y1) and node at position (x2, y2)"""
         # Check if coordinates are valid
         if (0 <= x1 < self.size and 0 <= y1 < self.size and 
             0 <= x2 < self.size and 0 <= y2 < self.size):
