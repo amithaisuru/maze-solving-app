@@ -47,8 +47,6 @@ def collect_statistics(num_graphs, maze_size):
         for algo in algorithms:
             time_taken = solve_graph(maze_app, graph, algo)
             total_times[algo] += time_taken
-        
-        #print(f"Graph {i+1}/{num_graphs} completed")
     
     # Calculate averages
     avg_times = {algo: total_times[algo] / num_graphs for algo in algorithms}
