@@ -1,3 +1,6 @@
+"""
+Computer Vision and Image Processing Module
+"""
 import cv2
 import numpy as np
 

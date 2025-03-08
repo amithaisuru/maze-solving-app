@@ -14,7 +14,7 @@ from vision_handler import detect_lines
 class MazeApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Maze Generator and Solver")
+        self.root.title("MazeMaster")
         
         # Theme state
         self.dark_mode = tk.BooleanVar(value=False)
@@ -150,10 +150,9 @@ class MazeApp:
         self.source_image = None
         self.photo_image = None
 
-        self.selection_mode = False  # Track if we're selecting start/end points
-        self.clicks_remaining = 0    # Number of clicks remaining (2 for start, 1 for end)
+        self.selection_mode = False
+        self.clicks_remaining = 0    
 
-        # Bind mouse click to canvas
         self.canvas.bind("<Button-1>", self.canvas_click)
 
     def canvas_click(self, event):
@@ -172,14 +171,14 @@ class MazeApp:
                 self.start = (y, x)
                 self.clicks_remaining -= 1
                 self.redraw_maze_with_points()
-                self.root.title("Maze Generator and Solver - Click end point")
+                self.root.title("MazeMaster - Click end point")
             elif self.clicks_remaining == 1:
                 # Set end point and exit selection mode
                 self.end = (y, x)
                 self.clicks_remaining -= 1
                 self.selection_mode = False
                 self.redraw_maze_with_points()
-                self.root.title("Maze Generator and Solver")
+                self.root.title("MazeMaster")
 
     def redraw_maze_with_points(self):
         """Redraw the maze with updated start and end points"""
@@ -264,7 +263,7 @@ class MazeApp:
                 self.canvas.delete("all")
                 self.draw_maze()
                 
-                # Redraw path if we were in the middle of solving
+                # Redraw path if we are in the middle of solving
                 if self.step_data and self.step_index > 0:
                     if self.step_index < len(self.step_data):
                         # Redraw current state
@@ -283,7 +282,7 @@ class MazeApp:
         if hasattr(self, 'image_canvas'):
             self.image_canvas.configure(background=canvas_bg)
             
-            # Redisplay the source image if it exists
+            # Display the source image if exists
             if self.source_image is not None:
                 self.display_source_image(self.source_image)
 
@@ -317,23 +316,21 @@ class MazeApp:
         if file_path:
             image = cv2.imread(file_path)
             if image is not None:
-                # Store the original image and convert from BGR to RGB for display
                 self.source_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
                 
                 # Generate maze from image
-                self.graph, processed_image = detect_lines(image)
+                self.graph, _ = detect_lines(image)
                 
-                # Enable selection mode instead of hardcoding points
                 self.selection_mode = True
-                self.clicks_remaining = 2  # Need 2 clicks: start and end
-                self.root.title("Maze Generator and Solver - Click start point")
+                self.clicks_remaining = 2  
+                self.root.title("MazeMaster - Click start point")
 
                 available_width = self.canvas_width - 2 * self.offset
                 available_height = self.canvas_height - 2 * self.offset
                 self.cell_size = min(available_width // self.graph.size, available_height // self.graph.size)
                 self.cell_size = max(self.cell_size, 10)
                 
-                # Clear and draw maze without start/end points initially
+                # Clear and draw maze without start,end points initially
                 self.canvas.delete("all")
                 self.draw_maze()
                 self.step_data = None
@@ -341,10 +338,7 @@ class MazeApp:
                 self.is_solving = False
                 self.time_label.config(text="Total Time: 0.0000 ms")
                 
-                # Display source image
                 self.display_source_image(self.source_image)
-                
-                # Show image label
                 self.image_label.config(text="")
 
     def display_source_image(self, image):
@@ -424,7 +418,7 @@ class MazeApp:
             outline=self.theme_colors["border"], width=border_width, tags="border"
         )
 
-        # Only draw start and end points if not in selection mode or if points are selected
+        # draw start and end points if not in selection mode
         if not self.selection_mode or self.clicks_remaining < 2:
             start_end_size = max(self.cell_size // 5, 6)
             sx, sy = self.start
@@ -458,11 +452,11 @@ class MazeApp:
         algorithm = self.algo_var.get()
 
         if algorithm == "BFS":
-            path, steps = self.bfs()
+            _, steps = self.bfs()
         elif algorithm == "Dijkstra":
-            path, steps = self.dijkstra()
+            _, steps = self.dijkstra()
         else:  # A*
-            path, steps = self.a_star()
+            _, steps = self.a_star()
 
         end_time = time.perf_counter()
         total_time = (end_time - start_time) * 1000
@@ -477,10 +471,10 @@ class MazeApp:
             return
 
         self.canvas.delete("highlight", "temp_path")
-        current, considered, parent = self.step_data[self.step_index]
+        current, considered, _ = self.step_data[self.step_index]
         
         x, y = current
-        # Use theme-appropriate colors
+        
         self.canvas.create_rectangle(
             y * self.cell_size + self.offset + 1, x * self.cell_size + self.offset + 1,
             (y + 1) * self.cell_size + self.offset - 1, (x + 1) * self.cell_size + self.offset - 1,
@@ -611,12 +605,12 @@ class MazeApp:
         
         self.canvas.delete("path")
         
-        # Draw a glowing path effect
+        # Draw a glowing path
         for i in range(len(path)-1):
             x1, y1 = path[i]
             x2, y2 = path[i+1]
             
-            # Draw a wider shadow for glow effect
+            # Draw shadow
             self.canvas.create_line(
                 y1 * self.cell_size + self.offset + self.cell_size/2,
                 x1 * self.cell_size + self.offset + self.cell_size/2,
