@@ -96,7 +96,7 @@ def detect_lines(src_image):
     gray = cv2.cvtColor(src_image, cv2.COLOR_BGR2GRAY)
 
     #coverting to binary image
-    _, binary = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
+    _, binary = cv2.threshold(gray, 100, 255, cv2.THRESH_BINARY_INV)
 
     #morphological closing 
     kernel = np.ones((5,5),np.uint8)
@@ -113,7 +113,7 @@ def detect_lines(src_image):
     lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=10, minLineLength=10, maxLineGap=10)
 
     horizontal_lines, vertical_lines = seperate_lines(lines)
-    return generate_graph(binary, horizontal_lines, vertical_lines)
+    return generate_graph(binary, horizontal_lines, vertical_lines), src_image
 
 def generate_graph(binary_image, horizontal_lines, vertical_lines):
 

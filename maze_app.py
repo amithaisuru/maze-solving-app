@@ -5,6 +5,7 @@ from collections import deque
 from tkinter import filedialog, ttk
 
 import cv2
+from PIL import Image, ImageTk
 
 from maze_classes import Graph
 from vision_handler import detect_lines
@@ -27,7 +28,7 @@ class MazeApp:
         
         # Header with title and theme toggle
         header_frame = ttk.Frame(self.main_frame)
-        header_frame.grid(row=0, column=0, columnspan=2, pady=(0, 20), sticky=(tk.W, tk.E))
+        header_frame.grid(row=0, column=0, columnspan=3, pady=(0, 20), sticky=(tk.W, tk.E))
         header_frame.columnconfigure(1, weight=1)
         
         # Title
@@ -109,20 +110,34 @@ class MazeApp:
         self.canvas_frame = ttk.Frame(self.main_frame, padding=2, relief="solid", borderwidth=1)
         self.canvas_frame.grid(row=1, column=1, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        self.canvas_width = 800
-        self.canvas_height = 600
+        self.canvas_width = 500
+        self.canvas_height = 500
         self.canvas = tk.Canvas(self.canvas_frame, width=self.canvas_width, height=self.canvas_height, 
                                highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True)
+        
+        # Frame for source image
+        self.image_frame = ttk.Frame(self.main_frame, padding=2, relief="solid", borderwidth=1)
+        self.image_frame.grid(row=1, column=2, sticky=(tk.W, tk.E, tk.N, tk.S), padx=(20, 0))
+        
+        self.image_canvas = tk.Canvas(self.image_frame, width=self.canvas_width, height=self.canvas_height,
+                                     highlightthickness=0)
+        self.image_canvas.pack(fill=tk.BOTH, expand=True)
+        
+        # Image label
+        self.image_label = ttk.Label(self.image_frame, text="Source Image", font=("Segoe UI", 12, "bold"),
+                                    anchor="center")
+        self.image_label.place(relx=0.5, rely=0.5, anchor="center")
         
         # Make the UI responsive
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         self.main_frame.columnconfigure(1, weight=1)
+        self.main_frame.columnconfigure(2, weight=1)
         self.main_frame.rowconfigure(1, weight=1)
         
         # Set minimum window size
-        self.root.minsize(1000, 700)
+        self.root.minsize(1200, 700)
         
         self.cell_size = 30
         self.offset = 20
@@ -132,6 +147,44 @@ class MazeApp:
         self.is_solving = False
         self.start = (0, 0)
         self.end = (0, 0)
+        self.source_image = None
+        self.photo_image = None
+
+        self.selection_mode = False  # Track if we're selecting start/end points
+        self.clicks_remaining = 0    # Number of clicks remaining (2 for start, 1 for end)
+
+        # Bind mouse click to canvas
+        self.canvas.bind("<Button-1>", self.canvas_click)
+
+    def canvas_click(self, event):
+        """Handle canvas clicks for selecting start and end points"""
+        if not self.selection_mode or not self.graph:
+            return
+        
+        # Convert canvas coordinates to maze coordinates
+        x = (event.x - self.offset) // self.cell_size
+        y = (event.y - self.offset) // self.cell_size
+        
+        # Check if click is within maze bounds
+        if (0 <= x < self.graph.size and 0 <= y < self.graph.size):
+            if self.clicks_remaining == 2:
+                # Set start point
+                self.start = (y, x)
+                self.clicks_remaining -= 1
+                self.redraw_maze_with_points()
+                self.root.title("Maze Generator and Solver - Click end point")
+            elif self.clicks_remaining == 1:
+                # Set end point and exit selection mode
+                self.end = (y, x)
+                self.clicks_remaining -= 1
+                self.selection_mode = False
+                self.redraw_maze_with_points()
+                self.root.title("Maze Generator and Solver")
+
+    def redraw_maze_with_points(self):
+        """Redraw the maze with updated start and end points"""
+        self.canvas.delete("all")
+        self.draw_maze()
 
     def apply_theme(self):
         style = ttk.Style()
@@ -226,6 +279,13 @@ class MazeApp:
                         final_parent_dict[self.start] = None
                         final_path = self.reconstruct_path(final_parent_dict, self.end)
                         self.draw_path(final_path)
+        
+        if hasattr(self, 'image_canvas'):
+            self.image_canvas.configure(background=canvas_bg)
+            
+            # Redisplay the source image if it exists
+            if self.source_image is not None:
+                self.display_source_image(self.source_image)
 
     def toggle_theme(self):
         self.apply_theme()
@@ -248,25 +308,81 @@ class MazeApp:
         self.step_index = 0
         self.is_solving = False
         self.time_label.config(text="Total Time: 0.0000 ms")
+        
+        # Clear the source image
+        self.clear_source_image()
 
     def load_image(self):
         file_path = filedialog.askopenfilename(filetypes=[("Image files", "*.png *.jpg *.jpeg")])
-        image = cv2.imread(file_path)
         if file_path:
-            self.graph =  detect_lines(image)
-            self.start, self.end = (0, 0), (self.graph.size-1, self.graph.size-1)
+            image = cv2.imread(file_path)
+            if image is not None:
+                # Store the original image and convert from BGR to RGB for display
+                self.source_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                
+                # Generate maze from image
+                self.graph, processed_image = detect_lines(image)
+                
+                # Enable selection mode instead of hardcoding points
+                self.selection_mode = True
+                self.clicks_remaining = 2  # Need 2 clicks: start and end
+                self.root.title("Maze Generator and Solver - Click start point")
 
-            available_width = self.canvas_width - 2 * self.offset
-            available_height = self.canvas_height - 2 * self.offset
-            self.cell_size = min(available_width // self.graph.size, available_height // self.graph.size)
-            self.cell_size = max(self.cell_size, 10)
-            
-            self.canvas.delete("all")
-            self.draw_maze()
-            self.step_data = None
-            self.step_index = 0
-            self.is_solving = False
-            self.time_label.config(text="Total Time: 0.0000 ms")
+                available_width = self.canvas_width - 2 * self.offset
+                available_height = self.canvas_height - 2 * self.offset
+                self.cell_size = min(available_width // self.graph.size, available_height // self.graph.size)
+                self.cell_size = max(self.cell_size, 10)
+                
+                # Clear and draw maze without start/end points initially
+                self.canvas.delete("all")
+                self.draw_maze()
+                self.step_data = None
+                self.step_index = 0
+                self.is_solving = False
+                self.time_label.config(text="Total Time: 0.0000 ms")
+                
+                # Display source image
+                self.display_source_image(self.source_image)
+                
+                # Show image label
+                self.image_label.config(text="")
+
+    def display_source_image(self, image):
+        if image is None:
+            return
+        
+        # Clear the image canvas
+        self.image_canvas.delete("all")
+        
+        # Resize image to fit the canvas while maintaining aspect ratio
+        img_height, img_width = image.shape[:2]
+        canvas_width = self.image_canvas.winfo_width() or self.canvas_width
+        canvas_height = self.image_canvas.winfo_height() or self.canvas_height
+        
+        # Calculate the scaling factor
+        scale = min(canvas_width / img_width, canvas_height / img_height)
+        new_width = int(img_width * scale)
+        new_height = int(img_height * scale)
+        
+        # Resize the image
+        resized_image = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_AREA)
+        
+        # Convert to PIL format and then to PhotoImage
+        pil_image = Image.fromarray(resized_image)
+        self.photo_image = ImageTk.PhotoImage(pil_image)
+        
+        # Calculate position to center the image
+        x_pos = (canvas_width - new_width) // 2
+        y_pos = (canvas_height - new_height) // 2
+        
+        # Create image on canvas
+        self.image_canvas.create_image(x_pos, y_pos, anchor=tk.NW, image=self.photo_image)
+
+    def clear_source_image(self):
+        self.image_canvas.delete("all")
+        self.source_image = None
+        self.photo_image = None
+        self.image_label.config(text="Source Image")
 
     def draw_maze(self):
         size = self.graph.size
@@ -276,12 +392,12 @@ class MazeApp:
             x = i * self.cell_size + self.offset
             y = i * self.cell_size + self.offset
             if i < size:
-                # Horizontal and vertical grid lines
                 self.canvas.create_line(self.offset, y, size * self.cell_size + self.offset, y, 
                                       fill=self.theme_colors["grid"], width=1, tags="grid")
                 self.canvas.create_line(x, self.offset, x, size * self.cell_size + self.offset, 
                                       fill=self.theme_colors["grid"], width=1, tags="grid")
         
+        # Draw walls
         for i in range(size):
             for j in range(size):
                 x1 = j * self.cell_size + self.offset
@@ -308,27 +424,29 @@ class MazeApp:
             outline=self.theme_colors["border"], width=border_width, tags="border"
         )
 
-        # Draw start and end points
-        start_end_size = max(self.cell_size // 5, 6)
-        sx, sy = self.start
-        self.canvas.create_oval(
-            sy * self.cell_size + self.offset + start_end_size,
-            sx * self.cell_size + self.offset + start_end_size,
-            sy * self.cell_size + self.offset + self.cell_size - start_end_size,
-            sx * self.cell_size + self.offset + self.cell_size - start_end_size,
-            fill=self.theme_colors["start"], outline=self.theme_colors["start"], width=2
-        )
-        ex, ey = self.end
-        self.canvas.create_oval(
-            ey * self.cell_size + self.offset + start_end_size,
-            ex * self.cell_size + self.offset + start_end_size,
-            ey * self.cell_size + self.offset + self.cell_size - start_end_size,
-            ex * self.cell_size + self.offset + self.cell_size - start_end_size,
-            fill=self.theme_colors["end"], outline=self.theme_colors["end"], width=2
-        )
+        # Only draw start and end points if not in selection mode or if points are selected
+        if not self.selection_mode or self.clicks_remaining < 2:
+            start_end_size = max(self.cell_size // 5, 6)
+            sx, sy = self.start
+            self.canvas.create_oval(
+                sy * self.cell_size + self.offset + start_end_size,
+                sx * self.cell_size + self.offset + start_end_size,
+                sy * self.cell_size + self.offset + self.cell_size - start_end_size,
+                sx * self.cell_size + self.offset + self.cell_size - start_end_size,
+                fill=self.theme_colors["start"], outline=self.theme_colors["start"], width=2
+            )
+        if not self.selection_mode or self.clicks_remaining == 0:
+            ex, ey = self.end
+            self.canvas.create_oval(
+                ey * self.cell_size + self.offset + start_end_size,
+                ex * self.cell_size + self.offset + start_end_size,
+                ey * self.cell_size + self.offset + self.cell_size - start_end_size,
+                ex * self.cell_size + self.offset + self.cell_size - start_end_size,
+                fill=self.theme_colors["end"], outline=self.theme_colors["end"], width=2
+            )
 
     def solve_maze(self):
-        if not self.graph or self.is_solving:
+        if not self.graph or self.is_solving or self.selection_mode:
             return
 
         self.canvas.delete("path", "highlight", "temp_path")
