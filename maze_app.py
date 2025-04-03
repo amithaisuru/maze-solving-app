@@ -564,30 +564,68 @@ class MazeApp:
             return abs(ex - x) + abs(ey - y)
 
         size = self.graph.size
-        pq = [(heuristic(*self.start), 0, self.start)]
-        costs = {self.start: 0}
+        # Initialize open and closed sets
+        open_set = {}
+        closed_set = set()
+        
+        # Track g-scores (cost from start) and f-scores (g + heuristic)
+        g_scores = {self.start: 0}
+        f_scores = {self.start: heuristic(*self.start)}
+        
+        # Priority queue with f-score as priority
+        pq = [(f_scores[self.start], 0, self.start)]  # (f_score, tie_breaker, node)
         parent = {self.start: None}
         steps = []
+        counter = 0  # Tie-breaker for equal f-scores
 
         while pq:
-            _, cost, (x, y) = heapq.heappop(pq)
+            _, _, current = heapq.heappop(pq)
+            x, y = current
+            
+            # Skip if already processed
+            if current in closed_set:
+                continue
+                
+            # Add to closed set
+            closed_set.add(current)
             considered = []
             
-            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
-                new_x, new_y = x + dx, y + dy
-                if (0 <= new_x < size and 0 <= new_y < size and 
-                    ((x, y), (new_x, new_y)) in self.graph.edges):
-                    new_cost = cost + 1
-                    if (new_x, new_y) not in costs or new_cost < costs[(new_x, new_y)]:
-                        costs[(new_x, new_y)] = new_cost
-                        priority = new_cost + heuristic(new_x, new_y)
-                        parent[(new_x, new_y)] = (x, y)
-                        heapq.heappush(pq, (priority, new_cost, (new_x, new_y)))
-                        considered.append((new_x, new_y))
-            
-            steps.append(((x, y), considered, parent[(x, y)]))
-            if (x, y) == self.end:
+            # If we've reached the end, break
+            if current == self.end:
+                steps.append((current, considered, parent[current]))
                 break
+
+            # Check neighbors
+            for dx, dy in [(0, 1), (1, 0), (0, -1), (-1, 0)]:
+                neighbor = (x + dx, y + dy)
+                new_x, new_y = neighbor
+                
+                # Skip if out of bounds or wall
+                if not (0 <= new_x < size and 0 <= new_y < size and 
+                        ((x, y), (new_x, new_y)) in self.graph.edges):
+                    continue
+                    
+                # Skip if already processed
+                if neighbor in closed_set:
+                    continue
+                    
+                # Calculate new g-score
+                tentative_g = g_scores[current] + 1
+                
+                # If new path is better or node not yet discovered
+                if neighbor not in g_scores or tentative_g < g_scores[neighbor]:
+                    # Update parent
+                    parent[neighbor] = current
+                    # Update scores
+                    g_scores[neighbor] = tentative_g
+                    f_scores[neighbor] = tentative_g + heuristic(*neighbor)
+                    considered.append(neighbor)
+                    
+                    # Add to priority queue with tie-breaker
+                    counter += 1
+                    heapq.heappush(pq, (f_scores[neighbor], counter, neighbor))
+            
+            steps.append((current, considered, parent[current]))
 
         return self.reconstruct_path(parent, self.end), steps
 
