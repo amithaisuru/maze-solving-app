@@ -1,5 +1,11 @@
 # 🧩 MazeMaster: Maze Generation and Solving Application
 
+- **Solving Animation**: Generating and solving a maze with step-by-step visualization.  
+  ![Solving Animation](screenshots/gifs/maze_gen_and_solve.gif)
+
+- **Maze from image**: Load maze from images and solve.
+  ![Solving Animation](screenshots/gifs/load_maze_from_image.gif)
+
 ## 📝 About the Project
 
 MazeMaster is a 🐍 Python-based desktop application designed for generating, visualizing, and solving square mazes using various pathfinding algorithms. It provides an intuitive graphical user interface (GUI) built with Tkinter 🖼️, allowing users to generate random mazes, solve them with different algorithms, and visualize the solving process. Additionally, the application supports uploading maze images 🖼️, processing them using computer vision techniques 👁️‍🗨️, and solving the detected maze. The project also includes a script to analyze the performance 📊 of different solving algorithms across multiple maze sizes.
@@ -122,3 +128,12 @@ MazeMaster/
 - Use clear, high-contrast maze images.
 - Only square mazes are supported.
 - Click inside the grid for start and end on image mazes.
+
+## More Screenshots
+- **Generated Maze**: A randomly generate maze and solve. 
+  ![Main Interface](screenshots/ss1_light.png)
+  ![Main Interface](screenshots/ss1_dark.png)
+  ![Main Interface](screenshots/ss2_dark.png)
+  
+- **Image-Based Maze**: A maze loaded from an image, with user-selected start and end points.  
+  ![Main Interface](screenshots/ss3_image_loaded.png)
