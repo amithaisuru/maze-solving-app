@@ -53,7 +53,7 @@ class Graph:
                 stack.append((next_x, next_y))
             else:
                 stack.pop()
-    
+        
     def printNodes(self):
         for i in range(self.size):
             for j in range(self.size):
